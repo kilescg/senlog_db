@@ -26,6 +26,7 @@ chart_config_dict = {
          },
 }
 
+RETRIES_COUNT = 3
 
 class I2C_Trinity:
     def __init__(self, bus):
@@ -111,58 +112,58 @@ class I2C_Trinity:
             timestamp.append(get_datetime())
             start_time = time.time()
             for address in addresses:
-                try:
-                    _, model_id, _, packet_data = self.read_sensor(address)
-                    model_id = str(model_id)
+                for cnt in range(RETRIES_COUNT):
+                    try:
+                        _, model_id, _, packet_data = self.read_sensor(address)
+                        model_id = str(model_id)
 
-                    targeted_data = packet_data[model_require_data_dict[model_id]]
-                    devices[address]["data"].append(targeted_data)
+                        targeted_data = packet_data[model_require_data_dict[model_id]]
+                        devices[address]["data"].append(targeted_data)
 
-                    # Print Sensor Data to Console  
-                    # address is Processor Address [1 - N]  
-                    # model_name_dict[model_id] is Sensor ModelType (Sensirion SCD4x or Panasonic SN-GCJA5)  
-                    # targeted_data is value form sensor (CO2 for Sensirion SCD4x and PM2.5 for Panasonic SN-GCJA5)
-                    print(
-                        f"   [bold magenta]Address [/bold magenta] : [orchid]{address}[orchid], [bold light_coral]Type[/bold light_coral] : [salmon1]{model_name_dict[model_id]}[/salmon1], [bold cyan]Data[/bold cyan] : [blue]{targeted_data}[blue]"
-                    )
-                    #========================================================================================================================================================
-                    # ADD Sensor Data to the MY-SQL DataBases
-                    # When Start in Round add data to Databases
-                    cal_con = db_connect()
-                    cal_tab = "db_sde.sensor_income"
-                    dt_string = get_datetime()
-                    cal_val = "('"+str(group_name)+"','"+str(model_name_dict[model_id])+"','"+str(address)+"','"+str(targeted_data)+"','"+str(dt_string)+"','"+str(cnt)+"')"
-                    cal_con.connect_sql_insert(cal_tab,cal_val)
-                    #========================================================================================================================================================
-                    # devices['datetime'].append(get_datetime())
-                    #============================================================================================================================================
-                    '''
-                        Insert and Update Databases for collect test and re-test routine  
-                    '''
-                    group_con = db_connect()
-                    group_tab = "db_sde.sensor_farformhome"
-                    if str(group_name).endswith("A") :
-                        companion = "-"
-                        sensor_group = "('"+str(group_name)+"','"+str(model_name_dict[model_id])+"','"+str(dt_string)+"','"+str("")+"','"+str(companion)+"')"
-                        group_con.connect_sql_insert(group_tab,sensor_group)
-                    elif str(group_name).endswith("B") :
-                        up_com = str(group_name[0:-2]) + "-A"
-                        up_val = "companion_name = '"+str(group_name)+"'"
-                        up_con = "group_name = '"+str(up_com)+"'"
-                        group_con.connect_update(group_tab,up_val,up_con)
-                    else :
-                        companion = "Invalid Name"
-                        up_val = "companion_name = '"+str(companion)+"'"
-                        up_con = "group_name = '"+str(up_com)+"'"
-                        group_con.connect_update(group_tab,up_val,up_con)
-                    #============================================================================================================================================             
-                except Exception as error:
-                    devices[address]["data"].append(0)
-                    print(
-                        f"[red] Can't read data on address [/red] : [bold red]{address}[/bold red]"
-                    )
-                    print("An exception occurred:", error)
-
+                        # Print Sensor Data to Console  
+                        # address is Processor Address [1 - N]  
+                        # model_name_dict[model_id] is Sensor ModelType (Sensirion SCD4x or Panasonic SN-GCJA5)  
+                        # targeted_data is value form sensor (CO2 for Sensirion SCD4x and PM2.5 for Panasonic SN-GCJA5)
+                        print(
+                            f"   [bold magenta]Address [/bold magenta] : [orchid]{address}[orchid], [bold light_coral]Type[/bold light_coral] : [salmon1]{model_name_dict[model_id]}[/salmon1], [bold cyan]Data[/bold cyan] : [blue]{targeted_data}[blue]"
+                        )
+                        #========================================================================================================================================================
+                        # ADD Sensor Data to the MY-SQL DataBases
+                        # When Start in Round add data to Databases
+                        cal_con = db_connect()
+                        cal_tab = "db_sde.sensor_income"
+                        dt_string = get_datetime()
+                        cal_val = "('"+str(group_name)+"','"+str(model_name_dict[model_id])+"','"+str(address)+"','"+str(targeted_data)+"','"+str(dt_string)+"','"+str(cnt)+"')"
+                        cal_con.connect_sql_insert(cal_tab,cal_val)
+                        #========================================================================================================================================================
+                        # devices['datetime'].append(get_datetime())
+                        #============================================================================================================================================
+                        '''
+                            Insert and Update Databases for collect test and re-test routine  
+                        '''
+                        group_con = db_connect()
+                        group_tab = "db_sde.sensor_farformhome"
+                        if str(group_name).endswith("A") :
+                            companion = "-"
+                            sensor_group = "('"+str(group_name)+"','"+str(model_name_dict[model_id])+"','"+str(dt_string)+"','"+str("")+"','"+str(companion)+"')"
+                            group_con.connect_sql_insert(group_tab,sensor_group)
+                        elif str(group_name).endswith("B") :
+                            up_com = str(group_name[0:-2]) + "-A"
+                            up_val = "companion_name = '"+str(group_name)+"'"
+                            up_con = "group_name = '"+str(up_com)+"'"
+                            group_con.connect_update(group_tab,up_val,up_con)
+                        else :
+                            companion = "Invalid Name"
+                            up_val = "companion_name = '"+str(companion)+"'"
+                            up_con = "group_name = '"+str(up_com)+"'"
+                            group_con.connect_update(group_tab,up_val,up_con)
+                        break
+                        #============================================================================================================================================             
+                    except Exception as error:
+                        devices[address]["data"].append(0)
+                        print(
+                            f"[orange] Retry : {cnt} ,[/orange][red] Can't read data on address [/red] : [bold red]{address}[/bold red], Error : {error}"
+                        )
                 time.sleep(0.1)
 
             while time.time() - start_time < interval:
