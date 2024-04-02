@@ -71,12 +71,15 @@ class I2C_Trinity:
         devices = {}
         timestamp = []
         addresses = self.scan()
-        #print(f"we found {addresses}")
+        error_addresses = []
         """
         Classifiy Sensor Type
         """
         for address in addresses:
             _, model_id, error_status, _ = self.read_sensor(address)
+            if error_status != 0:
+                error_addresses.append(address)
+                continue
             model_id = str(model_id)
             if str(model_id) not in model_name_dict.keys():
                 print("Unknow model ID")
@@ -112,9 +115,15 @@ class I2C_Trinity:
             timestamp.append(get_datetime())
             start_time = time.time()
             for address in addresses:
+                if address in error_addresses:
+                    continue
+                is_value_ok = 0
                 for cnt in range(RETRIES_COUNT):
                     try:
-                        _, model_id, _, packet_data = self.read_sensor(address)
+                        _, model_id, error_status, packet_data = self.read_sensor(address)
+                        if error_status == 0:
+                            continue
+                        is_value_ok = 1
                         model_id = str(model_id)
 
                         targeted_data = packet_data[model_require_data_dict[model_id]]
@@ -160,11 +169,15 @@ class I2C_Trinity:
                         break
                         #============================================================================================================================================             
                     except Exception as error:
-                        devices[address]["data"].append(0)
                         print(
                             f"[orange] Retry : {cnt} ,[/orange][red] Can't read data on address [/red] : [bold red]{address}[/bold red], Error : {error}"
                         )
-                time.sleep(0.1)
+                    time.sleep(0.1)
+                if not is_value_ok:
+                    print(
+                        f"   [bold magenta]Address [/bold magenta] : [orchid]{address}[orchid], [bold light_coral]Type[/bold light_coral] : [salmon1]{model_name_dict[model_id]}[/salmon1], [bold cyan]Data[/bold cyan] : [blue]{targeted_data}[blue] (No Retry Left)"
+                    )
+                    devices[address]["data"].append(0)
 
             while time.time() - start_time < interval:
                 if cnt == (total_round - 1):
